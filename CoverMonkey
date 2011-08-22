@@ -93,6 +93,9 @@ function usage(code) {
 "              HTML. If no -h option, writes HTML to a temporary file.\n" +
 "              This option may only work on MacOS.\n" +
 "\n" +
+"    --atlines Honor //@line comments in the source\n" +
+"              This option is probably not generally useful\n" +
+"\n" +
 "    -v        Display the CoverMonkey version number and exit\n" +
 "\n" +
 "    --help    Display this message and exit\n" +
@@ -117,6 +120,7 @@ var options = {
     overwrite: false,
     openhtml: false,  // automatically open the html file in a browser?
     outputops: false,
+    atlines: false,
 };
 
 
@@ -167,6 +171,9 @@ while(process.argv.length) {
         break;
     case '-a':
         options.outputops = true;
+        break;
+    case '--atlines':
+        options.atlines = true;
         break;
     default: 
         console.log("Unexpected argument: %s", arg);
@@ -226,11 +233,20 @@ var Script = (function() {
 
         lines.forEach(function(dataline) {
             var match;
+            var file, line, virtual;
 
             if (match = dataline.match(SCRIPT_START)) {
-                script.filename = match[1]; 
-                script.startline = parseInt(match[2], 10);
-                script.name = match[1] + ":" + match[2];
+                file = match[1];
+                line = parseInt(match[2], 10);
+                if (options.atlines) {
+                    script.rawfilename = file;
+                    virtual = remap(file, line);
+                    file = virtual[0];
+                    line = virtual[1];
+                }
+                script.filename = file; 
+                script.startline = line
+                script.name = file + ":" + line;
             }
             else if (dataline.match(SCRIPT_END)) {
                 return;
@@ -239,12 +255,18 @@ var Script = (function() {
                 script.entrypoint = script.opcodes.length;
             }
             else if (match = dataline.match(SCRIPT_DATA)) {
+                line = parseInt(match[5], 10);
+                if (options.atlines) {
+                    virtual = remap(script.rawfilename, line);
+                    line = virtual[1];
+                }
+
                 var opcode = {
                     pc: parseInt(match[1], 10),
                     count: parseInt(match[2], 10) +
                         parseInt(match[3], 10) +
                         parseInt(match[4], 10),
-                    srcline: parseInt(match[5], 10),
+                    srcline: line, 
                     assembly: match[6]
                 };
 
@@ -999,3 +1021,50 @@ function outputHTML(files, callback) {
 }
 
 function percent(x) { return (x*100).toFixed(1); }
+
+// Pass in a source file and line number (sfile, sline)
+// Returns the corresponding "virtual" file and line [vfile, vline]
+// based on @line comments in the specified source file, if any
+function remap(sfile, sline) {
+    if (remap.lastfile === sfile && remap.lastline === sline)
+        return remap.lastresult;
+
+    var atlines = atlineMap[sfile]
+    if (!atlines) {
+        atlines = [];
+        var srclines = fs.readFileSync(sfile, "utf8").split("\n");
+        srclines.forEach(function(l, n) {
+            var match = l.match(atlinePattern);
+            if (match) {
+                atlines.push({
+                    pline: n+1,
+                    vline: parseInt(match[1]),
+                    vfile: match[2]
+                });
+            }
+        })
+        
+        atlineMap[sfile] = atlines;
+    }
+
+    var vfile = sfile, vline = sline;
+
+    for(var i = 0; i < atlines.length; i++) {
+        var a = atlines[i];
+        if (a.pline >= sline) break;
+        else {
+            vfile = a.vfile;
+            vline = sline - a.pline + a.vline - 1;
+        }
+    }
+
+    remap.lastfile = sfile;
+    remap.lastline = sline;
+    return remap.lastresult = [vfile, vline];
+}
+
+// Maps filenames to an array of AtLine objects
+var atlineMap = {};
+// What an @line comment looks like
+var atlinePattern = /\/\/@line (\d+) "([^"]+)"/;
+
