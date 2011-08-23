@@ -67,6 +67,9 @@ Usage: CoverMonkey [options]
               HTML. If no -h option, writes HTML to a temporary file.
               This option may only work on MacOS.
 
+    --atlines Honor //@line comments in the source
+              This option is probably not generally useful
+
     -v        Display the CoverMonkey version number and exit
 
     --help    Display this message and exit

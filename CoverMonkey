@@ -30,12 +30,6 @@
 // Contributor(s): David Flanagan (dflanagan@mozilla.com)
 //                 Donovan Preston (dpreston@mozilla.com)
 
-//
-// TODO:
-//
-// Support @line comments.
-//
-
 var assert = require("assert");
 var fs = require("fs");
 var path = require("path");
