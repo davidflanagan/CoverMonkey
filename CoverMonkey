@@ -576,7 +576,10 @@ var Line = (function() {
             if (counts[0] === 0) return "none";
             if (counts[0] === -1) return "dead";
         }
-        return "some";
+        else {
+            if (counts[0] === -1) && (counts[1] > 0) return "full";
+            return "some";
+        }
     };
 
     return Line;
