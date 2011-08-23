@@ -577,7 +577,7 @@ var Line = (function() {
             if (counts[0] === -1) return "dead";
         }
         else {
-            if (counts[0] === -1) && (counts[1] > 0) return "full";
+            if (counts[0] === -1 && counts[1] > 0) return "full";
             return "some";
         }
     };
