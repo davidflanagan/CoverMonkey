@@ -746,15 +746,23 @@ function analyzeAndReportCoverage(scripts) {
     // Unless the -q option was used
     if (!options.quiet) {
 
+        var total = {
+            lines: 0, 
+            covered: 0,
+            partial: 0,
+            uncovered: 0,
+            dead: 0
+        };
+
         if (options.compact) {
-            console.log("%s|%s|%s|%s|%s|%s",
-                        pad.center("File", 20),
-                        pad.center("Sloc", 5),
-                        pad.center("Covered", 12),
-                        pad.center("Partial", 12),
-                        pad.center("Uncovered", 12),
-                        pad.center("Dead", 12));
-            console.log("------------------------------------------------------------------------------");
+            console.log("%s %s", pad(47), pad.center("Coverage", 28));
+            console.log("Cover% %s %s %s %s %s %s",
+                        pad.right("Filename", 32),
+                        pad.right("Lines", 7),
+                        pad.right("Full", 7),
+                        pad.right("Partial", 7),
+                        pad.right("None", 7),
+                        pad.right("Dead", 7));
                         
         }
 
@@ -785,23 +793,26 @@ function analyzeAndReportCoverage(scripts) {
             var partial = coverage[1];
             var uncovered = coverage[2];
             var dead = coverage[3];
-            var total = covered + partial + uncovered + dead;
+            var lines = covered + partial + uncovered + dead;
+
+            total.lines += lines;
+            total.covered += covered;
+            total.partial += partial;
+            total.uncovered += uncovered;
+            total.dead += dead;
 
             if (options.compact) {
-                console.log("%s|%s|%s %s%|%s %s%|%s %s%|%s %s%",
-                            pad.right(target, 20),
-                            pad.right(total, 5),
-                            pad.right(covered, 5),
-                            pad.right(percent(covered/total), 5),
-                            pad.right(partial, 5),
-                            pad.right(percent(partial/total), 5),
-                            pad.right(uncovered, 5),
-                            pad.right(percent(uncovered/total), 5),
-                            pad.right(dead, 5),
-                            pad.right(percent(dead/total), 5));
+                console.log("%s% %s %s %s %s %s %s",
+                            pad.right(percent(covered/lines), 5),
+                            pad.right(target, 32),
+                            pad.right(lines, 7),
+                            pad.right(covered, 7),
+                            pad.right(partial, 7),
+                            pad.right(uncovered, 7),
+                            pad.right(dead, 7));
             }
-            else if (options.percent || covered === total) {
-                console.log("%s: %s%", target, percent(covered/total));
+            else if (options.percent  || covered === lines) {
+                console.log("%s: %s%", target, percent(covered/lines));
             }
             else {
                 console.log("%s: %s%\n\t" +
@@ -810,11 +821,11 @@ function analyzeAndReportCoverage(scripts) {
                             "partially covered: %d (%s%)\n\t" +
                             "        uncovered: %d (%s%)\n\t" +
                             "             dead: %d (%d%)",
-                            target, percent(covered/total),  total,
-                            covered, percent(covered/total),
-                            partial, percent(partial/total),
-                            uncovered, percent(uncovered/total),
-                            dead, percent(dead/total));
+                            target, percent(covered/lines),  lines,
+                            covered, percent(covered/lines),
+                            partial, percent(partial/lines),
+                            uncovered, percent(uncovered/lines),
+                            dead, percent(dead/lines));
 
                 if (options.listlines) {
                     for(linenum in file.lines) {
@@ -838,6 +849,21 @@ function analyzeAndReportCoverage(scripts) {
                 }
             }
         });
+
+        if (options.compact) {
+            console.log("%s% %s %s %s %s %s %s",
+                        pad.right(percent(total.covered/total.lines), 5),
+                        pad.right("ALL FILES", 32),
+                        pad.right(total.lines, 7),
+                        pad.right(total.covered, 7),
+                        pad.right(total.partial, 7),
+                        pad.right(total.uncovered, 7),
+                        pad.right(total.dead, 7));
+        }
+        else {
+            console.log("Overall Coverage: %s%",
+                        percent(total.covered/total.lines));
+        }
     }
 
     if (options.htmlfile || options.openhtml) {
@@ -958,14 +984,14 @@ function outputHTML(files, callback) {
         var partial = coverage[1];
         var uncovered = coverage[2];
         var dead = coverage[3];
-        var total = covered + partial + uncovered + dead;
+        var lines = covered + partial + uncovered + dead;
         printf('<tr><td><a href="#%s">%s</a><td>%d' +
                '<td>%d (%d%)<td>%d (%d%)<td>%d (%d%)<td>%d (%d%)</tr>\n',
-               target, target, total, 
-               covered, percent(covered/total),
-               partial, percent(partial/total),
-               uncovered, percent(uncovered/total),
-               dead, percent(dead/total));
+               target, target, lines, 
+               covered, percent(covered/lines),
+               partial, percent(partial/lines),
+               uncovered, percent(uncovered/lines),
+               dead, percent(dead/lines));
         
     });
 
