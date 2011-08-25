@@ -36,7 +36,7 @@ var path = require("path");
 var console = require("console");
 var util = require("util");
 
-const VERSION = "0.1";
+const VERSION = "0.11";
 
 function usage(code) {
     var done = process.stdout.write(
@@ -90,6 +90,9 @@ function usage(code) {
 "    --atlines Honor //@line comments in the source\n" +
 "              This option is probably not generally useful\n" +
 "\n" +
+"    --noecho  CoverMonkey normally echos lines read from stdin to stdout\n" +
+"              if they are not -D output. With this option it does not.\n" +
+"\n" +
 "    -v        Display the CoverMonkey version number and exit\n" +
 "\n" +
 "    --help    Display this message and exit\n" +
@@ -115,6 +118,7 @@ var options = {
     openhtml: false,  // automatically open the html file in a browser?
     outputops: false,
     atlines: false,
+    echo: true,
 };
 
 
@@ -168,6 +172,9 @@ while(process.argv.length) {
         break;
     case '--atlines':
         options.atlines = true;
+        break;
+    case '--noecho':
+        options.echo = false;
         break;
     default: 
         console.log("Unexpected argument: %s", arg);
@@ -704,7 +711,7 @@ function parseScripts(stream, callback) {
                 inscript = true;
                 scriptlines = [ dataline ];
             }
-            else if (stream === process.stdin) {
+            else if (stream === process.stdin && options.echo) {
                 console.log(dataline);
             }
         }
