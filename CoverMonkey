@@ -262,11 +262,18 @@ var Script = (function() {
                     line = virtual[1];
                 }
 
+                // The counts field used to have 3 counts and this was
+                // hardcoded.  Now it has 6, but only the first 3 are real
+                // counts.  I've changed the regexp to allow any number.
+                // But the code below assumes that there are at least 3.
+                // Hopefully the -D output will stabilize...
+                var counts = match[2].split('/');
+
                 var opcode = {
                     pc: parseInt(match[1], 10),
-                    count: match[2].split('/').reduce(function(total, c) {
-                        return total + parseInt(c,10);
-                    }, 0),
+                    count: parseInt(counts[0], 10) +
+                        parseInt(counts[1], 10) +
+                        parseInt(counts[2], 10),
                     srcline: line, 
                     assembly: match[4]
                 };
