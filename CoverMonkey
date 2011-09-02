@@ -36,7 +36,7 @@ var path = require("path");
 var console = require("console");
 var util = require("util");
 
-const VERSION = "0.11";
+const VERSION = "0.12";
 
 function usage(code) {
     var done = process.stdout.write(
@@ -196,7 +196,7 @@ parseScripts(options.input, analyzeAndReportCoverage);
 // The rest of this file is supporting classes and functions, etc.
 const SCRIPT_START = /^--- SCRIPT ([^:]+):(\d+) ---$/;
 const SCRIPT_END = /^--- END SCRIPT/;
-const SCRIPT_DATA = /^(\d+):(\d+)\/(\d+)\/(\d+)\s+x\s+(\d+)\s+(.*)$/;
+const SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
 
 var Script = (function() {
     /*
@@ -256,7 +256,7 @@ var Script = (function() {
                 script.entrypoint = script.opcodes.length;
             }
             else if (match = dataline.match(SCRIPT_DATA)) {
-                line = parseInt(match[5], 10);
+                line = parseInt(match[3], 10);
                 if (options.atlines) {
                     virtual = remap(script.rawfilename, line);
                     line = virtual[1];
@@ -264,11 +264,11 @@ var Script = (function() {
 
                 var opcode = {
                     pc: parseInt(match[1], 10),
-                    count: parseInt(match[2], 10) +
-                        parseInt(match[3], 10) +
-                        parseInt(match[4], 10),
+                    count: match[2].split('/').reduce(function(total, c) {
+                        return total + parseInt(c,10);
+                    }, 0),
                     srcline: line, 
-                    assembly: match[6]
+                    assembly: match[4]
                 };
 
                 // Discard the (potentially very long) anonymous function 
