@@ -692,8 +692,9 @@ function parseScripts(stream, callback) {
         if (inscript) {
             scriptlines.push(dataline);
             if (dataline.match(SCRIPT_END)) {
-                // Skip initial dummy script
-                if (scriptlines[0] !== "--- SCRIPT (null):0 ---") {
+                // Skip initial dummy script and any -e scripts
+                if (scriptlines[0] !== "--- SCRIPT (null):0 ---" &&
+                    scriptline[0] !== "--- SCRIPT -e:1 ---") {
                     var script = new Script(scriptlines);
                     var string = script.toString();
 
