@@ -30,16 +30,18 @@
 //                 Donovan Preston (dpreston@mozilla.com)
 
 
+/*
+ * generate some sample output
+ * 
 if (!this.console || !console.log) {
     var console = { log: print };
 }
-
 data = snarf("/tmp/test.dis");
 console.log(JSON.stringify(coverage(data), null, 2));
-
+*/
 
 // Pass in a long string of -D data.
-// Returns an array of per-file (someday per-script?) coverage data
+// Returns an array of per-file coverage data
 function coverage(rawdata) {
     var Script = (function() {
         /*
@@ -603,4 +605,3 @@ function coverage(rawdata) {
 
     return retval;
 }
-
