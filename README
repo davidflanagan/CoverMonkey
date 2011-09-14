@@ -7,6 +7,12 @@ For correct dead-code analysis, CoverMonkey requires a patch that just
 went into the SpiderMonkey source tree (2011-08-22), so make sure you
 have a recent snapshot of the source.
 
+To build CoverMonkey, type:
+   
+   make
+
+This just assembles a CoverMonkey node script from the files in src/
+
 To use CoverMonkey, run your code in SpiderMonkey with the -D option
 set, and pipe the output (-D generates a *lot* of output) to
 CoverMonkey.
