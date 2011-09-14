@@ -15,7 +15,7 @@ var path = require("path");
 var console = require("console");
 var util = require("util");
 
-const VERSION = "0.12";
+const VERSION = "0.15";
 
 function usage(code) {
     var done = process.stdout.write(
