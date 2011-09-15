@@ -223,7 +223,7 @@ Coverage.prototype.parseData = function(rawdata) {
     });
 };
 
-Coverage.SCRIPT_START = /^--- SCRIPT (.*):(\d+) ?---$/;
+Coverage.SCRIPT_START = /^--- SCRIPT (.*):(\d+) ---$/;
 Coverage.SCRIPT_END = /^--- END SCRIPT/;
 Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
 
