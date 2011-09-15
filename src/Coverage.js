@@ -217,7 +217,7 @@ Coverage.prototype.parseData = function(rawdata) {
                     !equalArrays(newline.counts, oldline.counts)) {
                     oldline.coverage = newline.coverage;
                     oldline.counts = newline.counts;
-                    self._trigger("onLineUpdate", filename, i, oldline);
+                    self._trigger("onLineUpdate", filename, i+1, oldline);
                 }
             }
 
