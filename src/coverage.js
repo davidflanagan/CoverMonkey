@@ -223,7 +223,7 @@ Coverage.prototype.parseData = function(rawdata) {
     });
 };
 
-Coverage.SCRIPT_START = /^--- SCRIPT ([^:]+):(\d+) ---$/;
+Coverage.SCRIPT_START = /^--- SCRIPT (.*):(\d+) ?---$/;
 Coverage.SCRIPT_END = /^--- END SCRIPT/;
 Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
 
@@ -626,7 +626,7 @@ Coverage.Line = (function() {
 
     Line.prototype.addOpcode = function(pc, opcode) {
         if (this.opcodes[pc]) {
-            console.log("Ignoring duplicate opcode");
+            // console.log("Ignoring duplicate opcode");
             return;
         }
         this.opcodes[pc] = opcode;
@@ -669,8 +669,8 @@ Coverage.Line = (function() {
                 }
                 else {  // Unreachable opcode
                     if (c !== 0) {
-                        console.log("WARNING: unreachable opcode with non-0 count");
-                        console.log(pc, opcode.count, opcode.assembly);
+//                        console.log("WARNING: unreachable opcode with non-0 count");
+//                        console.log(pc, opcode.count, opcode.assembly);
                     }
                     
                     rawcounts.push(-1);
@@ -731,15 +731,3 @@ Coverage.Line = (function() {
 
     return Line;
 }());
-
-/*
- * generate some sample output
- * 
-if (!this.console || !console.log) {
-    var console = { log: print };
-}
-var data = snarf("/tmp/test.dis");
-var coverage = new Coverage();
-coverage.parseData(data);
-console.log(JSON.stringify(coverage.data, null, 2));
- */
