@@ -102,11 +102,6 @@ Coverage.prototype.parseData = function(rawdata) {
     lines.forEach(function(line) { parser.processLine(line); });
     var scripts = parser.scripts;
 
-    function assert(v) {
-        if (!v) throw Error("assertion failed");
-    }
-
-
     // Convert the array of Script objects to an object mapping filenames
     // to File objects
 
@@ -161,15 +156,6 @@ Coverage.prototype.parseData = function(rawdata) {
             filedata.lines[linenum] = l;
         }
 
-/*
-        // Put the lines in numeric order
-        filedata.lines.sort(function(a,b) {
-            if (a.linenum < b.linenum) return -1;
-            else if (a.linenum > b.linenum) return 1;
-            else return 0;
-        });
-*/
-
         if (!(filename in self.filenames)) {
             self.filenames[filename] = filedata;
             self._trigger("onNewScript", filename, filedata);
@@ -179,6 +165,7 @@ Coverage.prototype.parseData = function(rawdata) {
             // so update it from the new data
             var olddata = self.filenames[filename];
 
+/*
             // If any of the file's overall coverage stats have changed
             // copy the new data into the old filedata object and trigger
             // the onScriptUpdate callback
@@ -194,6 +181,7 @@ Coverage.prototype.parseData = function(rawdata) {
                 self._trigger("onScriptUpdate", filename, olddata);
             }
 
+*/
             // Now look through the lines arrays and trigger onLineUpdate
             // for any lines whose counts have changed.
 
@@ -227,6 +215,47 @@ Coverage.prototype.parseData = function(rawdata) {
                     oldline.counts = newline.counts;
                     self._trigger("onLineUpdate", filename, i, oldline);
                 }
+            }
+
+            // Now see if overall coverage for the file has changed, and
+            // if so call the onScriptUpdate callback.  I can't use the
+            // coverage stats in the filedata object because scripts
+            // could have been garbage collected and can disappear from
+            // the dumps!  (Trigger dumps before every script GC?)
+            var oldcovered = olddata.covered;
+            var oldpartial = olddata.partial;
+            var olduncovered = olddata.uncovered;
+            var olddead = olddata.dead;
+            var newcovered = 0, newpartial = 0, newuncovered = 0, newdead = 0;
+
+            for(var i = 0; i < olddata.lines.length; i++) {
+                if (!(i in olddata.lines)) continue;
+                var l = olddata.lines[i];
+                switch(l.coverage) {
+                case "full":
+                    newcovered++;
+                    break;
+                case "some":
+                    newpartial++;
+                    break;
+                case "none":
+                    newuncovered++;
+                    break;
+                case "dead":
+                    newdead++;
+                    break;
+                }
+            }
+
+            if (newcovered !== oldcovered ||
+                newpartial !== oldpartial ||
+                newuncovered !== olduncovered ||
+                newdead !== olddead) {
+                olddata.covered = newcovered;
+                olddata.partial = newpartial;
+                olddata.uncovered = newuncovered;
+                olddata.dead = newdead;
+                self._trigger("onScriptUpdate", filename, olddata);
             }
         }
     });
