@@ -150,7 +150,7 @@ Coverage.prototype.parseData = function(rawdata) {
         for(var linenum in file.lines) {
             var line = file.lines[linenum];
             var l = {};
-            l.linenum = Number(linenum);
+            linenum = Number(linenum);
             // XXX: convert to numeric constants?
             l.coverage = line.coverage();
             // XXX: cedric wants interpreted vs. jitted counts, but
@@ -158,15 +158,17 @@ Coverage.prototype.parseData = function(rawdata) {
             l.counts = line.counts();
             if (line.startFunc) l.startFunc = true;
             if (line.endFunc) l.endFunc = true;
-            filedata.lines.push(l);
+            filedata.lines[linenum] = l;
         }
 
+/*
         // Put the lines in numeric order
         filedata.lines.sort(function(a,b) {
             if (a.linenum < b.linenum) return -1;
             else if (a.linenum > b.linenum) return 1;
             else return 0;
         });
+*/
 
         if (!(filename in self.filenames)) {
             self.filenames[filename] = filedata;
@@ -208,16 +210,15 @@ Coverage.prototype.parseData = function(rawdata) {
             }
 
             for(var i = 0; i < filedata.lines.length; i++) {
+                if (!(i in filedata.lines)) continue;
                 var newline = filedata.lines[i];
                 var oldline = olddata.lines[i];
-
-                assert(newline.linenum === oldline.linenum);
 
                 if (newline.coverage !== oldline.coverage ||
                     !equalArrays(newline.counts, oldline.counts)) {
                     oldline.coverage = newline.coverage;
                     oldline.counts = newline.counts;
-                    self._trigger("onLineUpdate", filename, oldline);
+                    self._trigger("onLineUpdate", filename, i, oldline);
                 }
             }
         }
