@@ -402,6 +402,13 @@ Coverage.Script = (function() {
                     assembly: match[4]
                 };
 
+                // Ignore nop opcodes
+                // XXX: this is a fix for the problem of function definitions
+                // causing covered lines in the top-level function.  
+                // But could it cause other problems?
+                if (opcode.assembly === "nop")
+                    return;
+
                 // Discard the (potentially very long) anonymous function 
                 // souce associated with lambda opcodes
                 if (opcode.assembly.match(/^lambda /))
