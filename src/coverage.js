@@ -29,10 +29,27 @@
 //                 Donovan Preston (dpreston@mozilla.com)
 //
 
-
+// This class represents parsed code coverage data.
+// Pass data (as a string in -D format) to the parseData() method.
+// Access the parsed data through the data property. 
+// You can call parseData() multiple times, and the data will be 
+// updated with the most recent data.
 //
-// Pass in a long string of -D data.
-// Returns an array of per-file coverage data
+// Or, pass a newFile callback that will be invoked for each new script/file
+// in the coverage data.  And pass a lineUpdate callback; it will be invoked
+// each time an line in an existing file gets a new count.  (I don't think
+// that new lines will ever be added to an existing file, so lines should
+// only ever have count updates) 
+//
+// XXX: do I do a lineUpdate for every line in a new file?
+// When there are line updates, how do I update the overall coverage data
+// for the file?  Do I just call the file callback again?
+//
+// Should the class have methods for getting coverage stats for a
+// file?  Cedric thinks it could be nice to be able to add extra
+// properties to line data, for example... So for the lines of a file,
+// I should probably just return an array of objects...
+// 
 // Output format: an array of per-file data
 //
 // [{
@@ -48,20 +65,55 @@
 //              },...]
 //   }...]
 //
-function coverage(rawdata) {
-    var parser = new coverage.Parser();
+
+function Coverage() {
+    this.data = [];
+    this._listeners = [];
+    this.filenames = {};  // Map filenames to Coverage.File objects
+}
+
+Coverage.prototype.addListener = function(l) {
+    this._listeners.push(l);
+};
+
+Coverage.prototype.removeListener = function(l) {
+    var idx = this._listeners.indexOf(l);
+    if (idx !== -1)
+        this._listeners.splice(idx, 1);
+};
+
+Coverage.prototype._trigger = function(name /*, ... */) {
+    var type = name;  // the type of event
+    var self = this;
+    var args = Array.prototype.slice.call(arguments, 1);
+    
+    this._listeners.forEach(function(l) {
+        if (type in l) {
+            l[type].apply(self, args);
+        }
+    });
+};
+
+Coverage.prototype.parseData = function(rawdata) {
+    var self = this; // for nested functions
+    var parser = new Coverage.Parser();
     var lines = rawdata.split("\n")
     lines.forEach(function(line) { parser.processLine(line); });
     var scripts = parser.scripts;
 
-    var files = {};
+    function assert(v) {
+        if (!v) throw Error("assertion failed");
+    }
+
 
     // Convert the array of Script objects to an object mapping filenames
     // to File objects
+
+    var files = {};  // Map filenames to Coverage.File objects
     scripts.forEach(function(script) {
         var filename = script.filename;
         if (!(filename in files)) {
-            files[filename] = new coverage.File(filename);
+            files[filename] = new Coverage.File(filename);
         }
         var file = files[filename];
 
@@ -69,6 +121,12 @@ function coverage(rawdata) {
             file.line(opcode.srcline).addOpcode(script.name + ":" + opcode.pc,
                                                 opcode);
         });
+
+        // The first and last opcodes of each script should correspond
+        // (roughly) to the first and last lines of a function. Mark them
+        // to indicate this.
+        file.line(script.opcodes[0].srcline).startFunc = true;
+        file.line(script.opcodes[script.opcodes.length-1].srcline).endFunc=true;
     });
 
     // Deal with the files in alphabetical order
@@ -76,11 +134,10 @@ function coverage(rawdata) {
     for(filename in files) filenames.push(filename);
     filenames.sort();
     
-    var retval = [];
     filenames.forEach(function(filename) {
         var file = files[filename];
         var coverage = file.coverage();
-        var output = {
+        var filedata = {
             filename: filename,
             covered: coverage[0],
             partial: coverage[1],
@@ -91,7 +148,6 @@ function coverage(rawdata) {
 
         for(var linenum in file.lines) {
             var line = file.lines[linenum];
-            var msg = null;
             var l = {};
             l.linenum = Number(linenum);
             // XXX: convert to numeric constants?
@@ -99,28 +155,80 @@ function coverage(rawdata) {
             // XXX: cedric wants interpreted vs. jitted counts, but
             // these are one or more counts for lines with branches
             l.counts = line.counts();
-            output.lines.push(l);
+            if (line.startFunc) l.startFunc = true;
+            if (line.endFunc) l.endFunc = true;
+            filedata.lines.push(l);
         }
 
         // Put the lines in numeric order
-        output.lines.sort(function(a,b) {
+        filedata.lines.sort(function(a,b) {
             if (a.linenum < b.linenum) return -1;
             else if (a.linenum > b.linenum) return 1;
             else return 0;
         });
 
-        retval.push(output);
+        if (!(filename in self.filenames)) {
+            self.filenames[filename] = filedata;
+            self._trigger("onNewScript", filename, filedata);
+        }
+        else {
+            // Otherwise, we already have a data object for this file,
+            // so update it from the new data
+            var olddata = self.filenames[filename];
+
+            // If any of the file's overall coverage stats have changed
+            // copy the new data into the old filedata object and trigger
+            // the onScriptUpdate callback
+            if (olddata.covered !== filedata.covered ||
+                olddata.partial !== filedata.partial ||
+                olddata.uncovered !== filedata.uncovered ||
+                olddata.dead !== filedata.dead) {
+
+                olddata.covered = filedata.covered;
+                olddata.partial = filedata.partial;
+                olddata.uncovered = filedata.uncovered;
+                olddata.dead = filedata.dead;
+                self._trigger("onScriptUpdate", filename, olddata);
+            }
+
+            // Now look through the lines arrays and trigger onLineUpdate
+            // for any lines whose counts have changed.
+
+            // We expect that we'll get exactly the same set of lines
+            // on every call to parseData()
+            assert(filedata.lines.length === olddata.lines.length)
+
+            function equalArrays(a,b) {
+                if (a.length !== b.length) return false;
+                for(var i = 0, n = a.length; i < n; i++) {
+                    if (a[i] !== b[i]) return false;
+                }
+                return true;
+            }
+
+            for(var i = 0; i < filedata.lines.length; i++) {
+                var newline = filedata.lines[i];
+                var oldline = olddata.lines[i];
+
+                assert(newline.linenum === oldline.linenum);
+
+                if (newline.coverage !== oldline.coverage ||
+                    !equalArrays(newline.counts, oldline.counts)) {
+                    oldline.coverage = newline.coverage;
+                    oldline.counts = newline.counts;
+                    self._trigger("onLineUpdate", filename, oldline);
+                }
+            }
+        }
     });
+};
 
-    return retval;
-}
-
-coverage.SCRIPT_START = /^--- SCRIPT ([^:]+):(\d+) ---$/;
-coverage.SCRIPT_END = /^--- END SCRIPT/;
-coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
+Coverage.SCRIPT_START = /^--- SCRIPT ([^:]+):(\d+) ---$/;
+Coverage.SCRIPT_END = /^--- END SCRIPT/;
+Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
 
 // Parse a series of data lines to build up an array of Script objects
-coverage.Parser = (function() {
+Coverage.Parser = (function() {
     function Parser() {
         this.inscript = false;
         this.scriptlines = null;
@@ -132,11 +240,11 @@ coverage.Parser = (function() {
     Parser.prototype.processLine = function(dataline) {
         if (this.inscript) {
             this.scriptlines.push(dataline);
-            if (dataline.match(coverage.SCRIPT_END)) {
+            if (dataline.match(Coverage.SCRIPT_END)) {
                 // Skip initial dummy script and any -e scripts
                 if (this.scriptlines[0] !== "--- SCRIPT (null):0 ---" &&
                     this.scriptlines[0] !== "--- SCRIPT -e:1 ---") {
-                    var script = new coverage.Script(this.scriptlines);
+                    var script = new Coverage.Script(this.scriptlines);
                     var string = script.toString();
                     
                     var existingScript = this.scriptMap[string];
@@ -157,7 +265,7 @@ coverage.Parser = (function() {
             return true;
         }
         else {
-            if (dataline.match(coverage.SCRIPT_START)) {
+            if (dataline.match(Coverage.SCRIPT_START)) {
                 this.inscript = true;
                 this.scriptlines = [ dataline ];
                 return true;
@@ -168,7 +276,7 @@ coverage.Parser = (function() {
     return Parser;
 }());
 
-coverage.Script = (function() {
+Coverage.Script = (function() {
     /*
      * Parse an array of lines to create a Script object.
      * "Script" is used in the SpiderMonkey internals sense: it is the body
@@ -206,7 +314,7 @@ coverage.Script = (function() {
             var match;
             var file, line, virtual;
 
-            if (match = dataline.match(coverage.SCRIPT_START)) {
+            if (match = dataline.match(Coverage.SCRIPT_START)) {
                 file = match[1];
                 line = parseInt(match[2], 10);
                 if (options.atlines) {
@@ -219,13 +327,13 @@ coverage.Script = (function() {
                 script.startline = line
                 script.name = file + ":" + line;
             }
-            else if (dataline.match(coverage.SCRIPT_END)) {
+            else if (dataline.match(Coverage.SCRIPT_END)) {
                 return;
             }
             else if (dataline === "main:") {
                 script.entrypoint = script.opcodes.length;
             }
-            else if (match = dataline.match(coverage.SCRIPT_DATA)) {
+            else if (match = dataline.match(Coverage.SCRIPT_DATA)) {
                 line = parseInt(match[3], 10);
                 if (options.atlines) {
                     virtual = remap(script.rawfilename, line);
@@ -453,7 +561,7 @@ coverage.Script = (function() {
     return Script;
 }());
 
-coverage.File = (function() {
+Coverage.File = (function() {
     function File(name) {
         this.name = name;
         this.lines = {};
@@ -461,7 +569,7 @@ coverage.File = (function() {
 
     File.prototype.line = function(linenum) {
         if (!this.lines[linenum]) {
-            this.lines[linenum] = new coverage.Line(this, linenum);
+            this.lines[linenum] = new Coverage.Line(this, linenum);
         }
         return this.lines[linenum];
     };
@@ -508,7 +616,7 @@ coverage.File = (function() {
     return File;
 }());
 
-coverage.Line = (function() {
+Coverage.Line = (function() {
 
     function Line(file, number) {
         this.file = file;
@@ -630,6 +738,8 @@ coverage.Line = (function() {
 if (!this.console || !console.log) {
     var console = { log: print };
 }
-data = snarf("/tmp/test.dis");
-console.log(JSON.stringify(coverage(data), null, 2));
+var data = snarf("/tmp/test.dis");
+var coverage = new Coverage();
+coverage.parseData(data);
+console.log(JSON.stringify(coverage.data, null, 2));
  */

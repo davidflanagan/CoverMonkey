@@ -1,7 +1,7 @@
-// This code expects the coverage() function and its various
-// properties defined in coverage.js, but that file is not a Node
+// This code expects the Coverage class and its various 
+// properties defined in Coverage.js, but that file is not a Node
 // module, so ../Makefile just creates a CoverMonkey file by
-// concatenating coverage.js with this file.
+// concatenating Coverage.js with this file.
 // 
 // XXX: it might be nice if the code in this file could just call the 
 // the coverage() function and use its output.  But it isn't currently 
@@ -177,7 +177,7 @@ parseScripts(options.input, analyzeAndReportCoverage);
 // beginning of the -D data are printed to stdout.
 function parseScripts(stream, callback) {
     var fragment = "";  // line fragments we haven't processed yet
-    var parser = new coverage.Parser();
+    var parser = new Coverage.Parser();
 
     stream.on('data', function(chunk) {
         // Add any pending fragment to this chunk and break into lines
@@ -223,7 +223,7 @@ function analyzeAndReportCoverage(scripts) {
     scripts.forEach(function(script) {
         var filename = script.filename;
         if (!(filename in data)) {
-            data[filename] = new coverage.File(filename);
+            data[filename] = new Coverage.File(filename);
         }
         var file = data[filename];
 
