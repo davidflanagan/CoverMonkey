@@ -394,7 +394,6 @@ function analyzeAndReportCoverage(scripts) {
                         if (msg) console.log("%s:%d: %s",
                                              file.name, linenum, msg);
                     }
-                    
                 }
             }
         });
