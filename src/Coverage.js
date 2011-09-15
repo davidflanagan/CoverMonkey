@@ -132,7 +132,7 @@ Coverage.prototype.parseData = function(rawdata) {
 
     // Deal with the files in alphabetical order
     var filenames = [];
-    for(filename in files) filenames.push(filename);
+    for(var filename in files) filenames.push(filename);
     filenames.sort();
     
     filenames.forEach(function(filename) {
@@ -199,7 +199,9 @@ Coverage.prototype.parseData = function(rawdata) {
 
             // We expect that we'll get exactly the same set of lines
             // on every call to parseData()
-            assert(filedata.lines.length === olddata.lines.length)
+            // XXX: actually, in the browser, separate scripts in 
+            // the same file may be compiled at different times, apparently
+            // assert(filedata.lines.length === olddata.lines.length)
 
             function equalArrays(a,b) {
                 if (a.length !== b.length) return false;
@@ -213,6 +215,11 @@ Coverage.prototype.parseData = function(rawdata) {
                 if (!(i in filedata.lines)) continue;
                 var newline = filedata.lines[i];
                 var oldline = olddata.lines[i];
+
+                if (!oldline) {
+                    olddata.lines[i] = newline;
+                    self._trigger("onLineUpdate", filename, i, newline);
+                }
 
                 if (newline.coverage !== oldline.coverage ||
                     !equalArrays(newline.counts, oldline.counts)) {
