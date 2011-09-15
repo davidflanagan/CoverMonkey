@@ -172,12 +172,59 @@ if (!options.input) {
 // Collect the coverage information, then analyze and report it
 parseScripts(options.input, analyzeAndReportCoverage);
 
+
+// Pass in a source file and line number (sfile, sline)
+// Returns the corresponding "virtual" file and line [vfile, vline]
+// based on @line comments in the specified source file, if any
+function remap(sfile, sline) {
+    if (remap.lastfile === sfile && remap.lastline === sline)
+        return remap.lastresult;
+
+    var atlines = atlineMap[sfile]
+    if (!atlines) {
+        atlines = [];
+        var srclines = fs.readFileSync(sfile, "utf8").split("\n");
+        srclines.forEach(function(l, n) {
+            var match = l.match(atlinePattern);
+            if (match) {
+                atlines.push({
+                    pline: n+1,
+                    vline: parseInt(match[1]),
+                    vfile: match[2]
+                });
+            }
+        })
+        
+        atlineMap[sfile] = atlines;
+    }
+
+    var vfile = sfile, vline = sline;
+
+    for(var i = 0; i < atlines.length; i++) {
+        var a = atlines[i];
+        if (a.pline >= sline) break;
+        else {
+            vfile = a.vfile;
+            vline = sline - a.pline + a.vline - 1;
+        }
+    }
+
+    remap.lastfile = sfile;
+    remap.lastline = sline;
+    return remap.lastresult = [vfile, vline];
+}
+
+// Maps filenames to an array of AtLine objects
+var atlineMap = {};
+// What an @line comment looks like
+var atlinePattern = /\/\/@line (\d+) "([^"]+)"/;
+
 // Read a stream of -D data and parse it. Interpret filenames relative to
 // the specified directory.  If stream is stdin then any lines before the
 // beginning of the -D data are printed to stdout.
 function parseScripts(stream, callback) {
     var fragment = "";  // line fragments we haven't processed yet
-    var parser = new Coverage.Parser();
+    var parser = new Coverage.Parser(options.atlines ? remap : null);
 
     stream.on('data', function(chunk) {
         // Add any pending fragment to this chunk and break into lines
@@ -546,50 +593,3 @@ function outputHTML(files, callback) {
 }
 
 function percent(x) { return (x*100).toFixed(1); }
-
-// Pass in a source file and line number (sfile, sline)
-// Returns the corresponding "virtual" file and line [vfile, vline]
-// based on @line comments in the specified source file, if any
-function remap(sfile, sline) {
-    if (remap.lastfile === sfile && remap.lastline === sline)
-        return remap.lastresult;
-
-    var atlines = atlineMap[sfile]
-    if (!atlines) {
-        atlines = [];
-        var srclines = fs.readFileSync(sfile, "utf8").split("\n");
-        srclines.forEach(function(l, n) {
-            var match = l.match(atlinePattern);
-            if (match) {
-                atlines.push({
-                    pline: n+1,
-                    vline: parseInt(match[1]),
-                    vfile: match[2]
-                });
-            }
-        })
-        
-        atlineMap[sfile] = atlines;
-    }
-
-    var vfile = sfile, vline = sline;
-
-    for(var i = 0; i < atlines.length; i++) {
-        var a = atlines[i];
-        if (a.pline >= sline) break;
-        else {
-            vfile = a.vfile;
-            vline = sline - a.pline + a.vline - 1;
-        }
-    }
-
-    remap.lastfile = sfile;
-    remap.lastline = sline;
-    return remap.lastresult = [vfile, vline];
-}
-
-// Maps filenames to an array of AtLine objects
-var atlineMap = {};
-// What an @line comment looks like
-var atlinePattern = /\/\/@line (\d+) "([^"]+)"/;
-

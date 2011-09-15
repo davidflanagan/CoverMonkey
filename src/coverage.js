@@ -229,11 +229,12 @@ Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
 
 // Parse a series of data lines to build up an array of Script objects
 Coverage.Parser = (function() {
-    function Parser() {
+    function Parser(remap) {
         this.inscript = false;
         this.scriptlines = null;
         this.scripts = [];   // Array of Script objects that hold the data
         this.scriptMap = {}; // String->Script map for detecting duplicate scripts
+        this.remap = remap;  // Option function for remapping file/line
     };
 
     // process a single line.  Return true if we consumed it; false otherwise
@@ -244,7 +245,8 @@ Coverage.Parser = (function() {
                 // Skip initial dummy script and any -e scripts
                 if (this.scriptlines[0] !== "--- SCRIPT (null):0 ---" &&
                     this.scriptlines[0] !== "--- SCRIPT -e:1 ---") {
-                    var script = new Coverage.Script(this.scriptlines);
+                    var script = new Coverage.Script(this.scriptlines,
+                                                     this.remap);
                     var string = script.toString();
                     
                     var existingScript = this.scriptMap[string];
@@ -305,10 +307,11 @@ Coverage.Script = (function() {
      * And, after the script is analyzed, each opcode will also have a
      * reachable flag to indicate if it can ever actually be executed.
      */
-    function Script(lines) {
+    function Script(lines, remap) {
         var script = this;
         script.opcodes = [];
         script.pcToOpcodeIndex = {};
+        script.remap = remap;
 
         lines.forEach(function(dataline) {
             var match;
@@ -317,9 +320,9 @@ Coverage.Script = (function() {
             if (match = dataline.match(Coverage.SCRIPT_START)) {
                 file = match[1];
                 line = parseInt(match[2], 10);
-                if (options.atlines) {
+                if (script.remap) {
                     script.rawfilename = file;
-                    virtual = remap(file, line);
+                    virtual = script.remap(file, line);
                     file = virtual[0];
                     line = virtual[1];
                 }
@@ -335,14 +338,14 @@ Coverage.Script = (function() {
             }
             else if (match = dataline.match(Coverage.SCRIPT_DATA)) {
                 line = parseInt(match[3], 10);
-                if (options.atlines) {
-                    virtual = remap(script.rawfilename, line);
+                if (script.remap) {
+                    virtual = script.remap(script.rawfilename, line);
                     line = virtual[1];
                 }
 
                 // The counts field used to have 3 counts and this was
-                // hardcoded.  Now it has 6, but only the first 3 are real
-                // counts.  I've changed the regexp to allow any number.
+                // hardcoded. Now it has 6, but only the first 3 are real
+                // counts. I've changed the regexp to allow any number.
                 // But the code below assumes that there are at least 3.
                 // Hopefully the -D output will stabilize...
                 var counts = match[2].split('/');
