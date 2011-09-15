@@ -282,6 +282,7 @@ Coverage.Parser = (function() {
             if (dataline.match(Coverage.SCRIPT_END)) {
                 // Skip initial dummy script and any -e scripts
                 if (this.scriptlines[0] !== "--- SCRIPT (null):0 ---" &&
+                    this.scriptlines[0] !== "--- SCRIPT :0 ---" &&
                     this.scriptlines[0] !== "--- SCRIPT -e:1 ---") {
                     var script = new Coverage.Script(this.scriptlines,
                                                      this.remap);
