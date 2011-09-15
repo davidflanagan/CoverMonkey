@@ -86,10 +86,11 @@ Coverage.prototype._trigger = function(name /*, ... */) {
     var type = name;  // the type of event
     var self = this;
     var args = Array.prototype.slice.call(arguments, 1);
-    
+    args.unshift(this);
+
     this._listeners.forEach(function(l) {
         if (type in l) {
-            l[type].apply(self, args);
+            l[type].apply(l, args);
         }
     });
 };
