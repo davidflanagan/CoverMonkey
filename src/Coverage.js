@@ -153,7 +153,9 @@ Coverage.prototype.parseData = function(rawdata) {
             l.counts = line.counts();
             if (line.startFunc) l.startFunc = true;
             if (line.endFunc) l.endFunc = true;
-            filedata.lines[linenum] = l;
+            // Subtract 1 so that array index corresponds to the index
+            // into an array of lines in a file.
+            filedata.lines[linenum-1] = l;
         }
 
         if (!(filename in self.filenames)) {
@@ -206,7 +208,9 @@ Coverage.prototype.parseData = function(rawdata) {
 
                 if (!oldline) {
                     olddata.lines[i] = newline;
-                    self._trigger("onLineUpdate", filename, i, newline);
+                    // Add one to the line number to get back to
+                    // one-based line numbers
+                    self._trigger("onLineUpdate", filename, i+1, newline);
                 }
 
                 if (newline.coverage !== oldline.coverage ||
