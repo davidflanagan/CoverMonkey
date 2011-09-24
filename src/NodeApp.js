@@ -545,7 +545,20 @@ function outputHTML(files, callback) {
 
     printf("</table>\n");
 
+/*
     // Now output the annotated source code of each target
+    // And while doing that, keep track of the top 20 to 50 hottest lines.
+    var hotlines = [];
+    var NUMHOTLINES = 20;
+    var hotthreshold = 10;
+    function addHotLine(srcline, counts, jitpercent) {
+        var maxcount = counts[counts.length-1];
+        if (maxcount <= hotthreshold) return;
+
+        hotlines.push(srcline
+    }
+
+*/
     options.targets.forEach(function(target) {
         var file = files[target];
         var srclines = fs.readFileSync(target, "utf8").split("\n");
@@ -556,11 +569,19 @@ function outputHTML(files, callback) {
             var linedata = file.lines[linenum];
             var cov = file.coverageClass(linenum);
             var c = "line" + cov + file.profileClass(linenum);
+
+/*            addHotLine(srcline, counts, jitpercent);*/
+
             if (srcline === "") srcline = " "; // To make the HTML format right.
             if (cov) {
+                var counts = linedata.counts();
+                var jitpercent = linedata.jitpercent();
                 if (cov === " full") {
-                    var counts = linedata.counts();
-                    cov = "// " + counts.join(",");
+                    cov = "// " + counts.join(",") + " " +
+                        jitpercent + "%";
+                }
+                else if (cov === " some") {
+                    cov = "//" + cov +  " " + counts.join(",");
                 }
                 else
                     cov = "//" + cov;
@@ -578,7 +599,7 @@ function outputHTML(files, callback) {
                     printf("<tr><td>%s<td>%s<td>%d<td>%s</tr>",
                            pc.substring(0,idx),
                            pc.substring(idx+1),
-                           opcode.count,
+                           opcode.interpreted+opcode.jitted,
                            opcode.assembly);
                 }
                 printf("</table>");

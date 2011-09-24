@@ -167,23 +167,6 @@ Coverage.prototype.parseData = function(rawdata) {
             // so update it from the new data
             var olddata = self.filenames[filename];
 
-/*
-            // If any of the file's overall coverage stats have changed
-            // copy the new data into the old filedata object and trigger
-            // the onScriptUpdate callback
-            if (olddata.covered !== filedata.covered ||
-                olddata.partial !== filedata.partial ||
-                olddata.uncovered !== filedata.uncovered ||
-                olddata.dead !== filedata.dead) {
-
-                olddata.covered = filedata.covered;
-                olddata.partial = filedata.partial;
-                olddata.uncovered = filedata.uncovered;
-                olddata.dead = filedata.dead;
-                self._trigger("onScriptUpdate", filename, olddata);
-            }
-
-*/
             // Now look through the lines arrays and trigger onLineUpdate
             // for any lines whose counts have changed.
 
@@ -267,7 +250,7 @@ Coverage.prototype.parseData = function(rawdata) {
 
 Coverage.SCRIPT_START = /^--- SCRIPT (.*):(\d+) ---$/;
 Coverage.SCRIPT_END = /^--- END SCRIPT/;
-Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/\d+)+)\s+x\s+(\d+)\s+(.*)$/;
+Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/[\d\s]+)+)\s+x\s+(\d+)\s+(.*)$/;
 
 // Parse a series of data lines to build up an array of Script objects
 Coverage.Parser = (function() {
@@ -290,15 +273,17 @@ Coverage.Parser = (function() {
                     this.scriptlines[0] !== "--- SCRIPT -e:1 ---") {
                     var script = new Coverage.Script(this.scriptlines,
                                                      this.remap);
+
+                    script.checkReachability();
+                    script.fixCounts();
+
                     var string = script.toString();
-                    
                     var existingScript = this.scriptMap[string];
                     if (existingScript) {
                         // We've seen this script before
                         existingScript.addCounts(script);
                     }
                     else {
-                        script.checkReachability();
                         this.scripts.push(script);
                         this.scriptMap[string] = script;
                     }
@@ -392,15 +377,21 @@ Coverage.Script = (function() {
                 // But the code below assumes that there are at least 3.
                 // Hopefully the -D output will stabilize...
                 var counts = match[2].split('/');
+//                var jits = ;
 
                 var opcode = {
                     pc: parseInt(match[1], 10),
-                    count: parseInt(counts[0], 10) +
-                        parseInt(counts[1], 10) +
-                        parseInt(counts[2], 10),
+//                    count: parseInt(counts[0], 10) + jits,
+                    interpreted: parseInt(counts[0], 10),
+                    jitted: parseInt(counts[1], 10) + parseInt(counts[2], 10),
                     srcline: line, 
                     assembly: match[4]
                 };
+
+                // Figure out what percentage of executions were method JITted
+//                opcode.jitpct = opcode.count > 0
+//                    ? jits/opcode.count
+//                    : 0;
 
                 // Ignore nop opcodes
                 // XXX: this is a fix for the problem of function definitions
@@ -448,8 +439,15 @@ Coverage.Script = (function() {
     // Add the opcode counts from that script to the opcodes in this script.
     // This method requires that this.equals(that)
     Script.prototype.addCounts = function(that) {
-        for(var i = 0; i < this.opcodes.length; i++)
-            this.opcodes[i].count += that.opcodes[i].count;
+        for(var i = 0; i < this.opcodes.length; i++) {
+            var thiscounts = this.opcodes[i].count;
+            var thatcounts = that.opcodes[i].count;
+            var thisjits = thiscounts * this.opcodes[i].jitpct;
+            var thatjits = thatcounts * that.opcodes[i].jitpct;
+            var totalcounts = thiscounts + thatcounts;
+            this.opcodes[i].count = totalcounts;
+            this.opcodes[i].jitpct = (thisjits+thatjits)/totalcounts;
+        }
     };
 
     var switches = {
@@ -556,13 +554,16 @@ Coverage.Script = (function() {
         if (op in terminators) {
             // This opcode makes the script exit, so nothing is 
             // reachable from here.
+            op.branchpoint = true;
             return;
         }
         else if (op in unconditionals) {
             // The unconditional jump target is reachable
+            op.branchpoint = true;
             reachable(script, branchIndex(opcode.assembly));
         }
         else if (op in conditionals) {
+            op.branchpoint = true;
             // The next opcode and the jump target are both reachable
             reachable(script, opcodeIndex+1);
             // If there is a branch address, then that is reachable, too.
@@ -572,6 +573,8 @@ Coverage.Script = (function() {
             if (branch) reachable(script, branch);
         }
         else if (op in switches) {
+            op.branchpoint = true;
+
             // Multiple opcodes are reachable
             // The -D output for switches includes relative jump offsets
             // not absolute ones like those used by jumps
@@ -610,6 +613,57 @@ Coverage.Script = (function() {
         // have opcodes marked unreachable that we don't want marked that way.
         reachable(this, 0);
     };
+
+    // This method is designed to be called after checkReachability has
+    // marked the entrypoints and branchpoints in the script.  For each 
+    // non-branching sequence of opcodes (a "basic block"?) I want to make
+    // sure that the counts are the same.  Some opcodes get optimized away
+    // and appear to never execute. And some opcodes are there for the 
+    // interpreter while others are for the method jit. Since this is 
+    // a linear sequence they must all execute the same number of times.
+    // So take the max of the interpreted count and the max of the jitted count.
+    Script.prototype.fixCounts = function() {
+        var i = 0, n = this.opcodes.length;
+        var start, end, maxinterp = 0, maxjit = 0;
+
+        while(i < n) {
+            // Find the first reachable entrypoint at or > i
+            while(i < n &&
+                  !this.opcodes[i].entrypoint || !this.opcodes[i].reachable)
+                i++;
+
+            if (i >= n) break;
+
+            // Now scan from this point to the next branchpoint or to
+            // the next opcode right before an entry point (or to the
+            // end of the script) and calculate the largest counts
+            start = end = i;
+            maxinterp = 0;
+            maxjit = 0;
+            while(i < n) {
+                end = i;
+                maxinterp = Math.max(maxinterp, this.opcodes[i].interpreted);
+                maxjit = Math.max(maxjit, this.opcodes[i].jitted);
+                
+                // If this is a branchpoint, or if the next opcode is an
+                // entrypoint, then this is the last opcode in the block
+                if (this.opcodes[i].branchpoint ||
+                    (i < n-1 && this.opcodes[i+1].entrypoint)) {
+                    break;
+                }
+
+                i++;
+            }
+
+            // Now loop back through those opcodes setting the counts to
+            // the maximum counts we found.
+            for(i = start; i <= end; i++) {
+                var opcode = this.opcodes[i];
+                opcode.interpreted = maxinterp;
+                opcode.jitted = maxjit;
+            }
+        }
+    }
 
     return Script;
 }());
@@ -686,6 +740,22 @@ Coverage.Line = (function() {
         this.opcodes[pc] = opcode;
     };
 
+    // Return the percentage (0-100) of executions that were jits for this line
+    Line.prototype.jitpercent = function() {
+        if (!this._jitpercent) {
+            var total = 0, totaljit = 0
+            for(var pc in this.opcodes) {
+                var opcode = this.opcodes[pc];
+                total += opcode.interpreted + opcode.jitted;
+                totaljit += opcode.jitted;
+            }
+
+            this._jitpercent = Math.round(100*totaljit/total);
+        }
+
+        return this._jitpercent;
+    };
+
     // Return an array of the counts for this line.  If all opcodes have
     // the same count, then this will be a single element array.  If the line
     // includes a branch then there will be multiple elements.  The counts will
@@ -701,8 +771,9 @@ Coverage.Line = (function() {
 
             for(var pc in this.opcodes) {
                 var opcode = this.opcodes[pc];
-                var c = opcode.count;
+                var c = opcode.interpreted + opcode.jitted;
                 if (opcode.reachable) {
+/*
 
                     // If the last opcode continues unconditionally on to this 
                     // one then skip this opcode if the count is the same (it 
@@ -720,8 +791,13 @@ Coverage.Line = (function() {
                         max = Math.max(max, c);
                         rawcounts.push(c);
                     }
+*/
+                    min = Math.min(min, c);
+                    max = Math.max(max, c);
+                    rawcounts.push(c);
                 }
                 else {  // Unreachable opcode
+/*
                     if (c !== 0) {
                         // XXX: reinstate this somehow?
                         // Do these warnings still occur?
@@ -729,11 +805,13 @@ Coverage.Line = (function() {
                         // console.log("WARNING: unreachable opcode with non-0 count");
                         // console.log(pc, opcode.count, opcode.assembly);
                     }
-                    
+*/                    
                     rawcounts.push(-1);
                 }
 
+/*
                 lastopcode = opcode;
+*/
             }
 
             var counts;
