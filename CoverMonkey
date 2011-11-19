@@ -416,13 +416,9 @@ Coverage.Script = (function() {
     // This method requires that this.equals(that)
     Script.prototype.addCounts = function(that) {
         for(var i = 0; i < this.opcodes.length; i++) {
-            var thiscounts = this.opcodes[i].count;
-            var thatcounts = that.opcodes[i].count;
-            var thisjits = thiscounts * this.opcodes[i].jitpct;
-            var thatjits = thatcounts * that.opcodes[i].jitpct;
-            var totalcounts = thiscounts + thatcounts;
-            this.opcodes[i].count = totalcounts;
-            this.opcodes[i].jitpct = (thisjits+thatjits)/totalcounts;
+            this.opcodes[i].interpreted += that.opcodes[i].interpreted;
+            this.opcodes[i].jitted += that.opcodes[i].jitted;
+            
         }
     };
 
