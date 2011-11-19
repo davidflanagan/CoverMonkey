@@ -1,34 +1,3 @@
-//
-// Copyright (c) 2011 The Mozilla Foundation.
-// All rights reserved.
-// 
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     Redistributions of source code must retain the above copyright
-//     notice, this list of conditions and the following disclaimer.
-//
-//     Redistributions in binary form must reproduce the above copyright
-//     notice, this list of conditions and the following disclaimer in the
-//     documentation and/or other materials provided with the distribution.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-// IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
-// TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-// PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
-// TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Contributor(s): David Flanagan (dflanagan@mozilla.com)
-//                 Donovan Preston (dpreston@mozilla.com)
-//
-
 // This class represents parsed code coverage data.
 // Pass data (as a string in -D format) to the parseData() method.
 // Access the parsed data through the data property. 
@@ -250,7 +219,10 @@ Coverage.prototype.parseData = function(rawdata) {
 
 Coverage.SCRIPT_START = /^--- SCRIPT (.*):(\d+) ---$/;
 Coverage.SCRIPT_END = /^--- END SCRIPT/;
-Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/[\d\s]+)+)\s+x\s+(\d+)\s+(.*)$/;
+// Coverage.SCRIPT_DATA = /^(\d+):(\d+(?:\/[\d\s]+)+)\s+x\s+(\d+)\s+(.*)$/;
+Coverage.OPCODE = /^(\d+):\s*(\d+)\s+(.*)$/;
+Coverage.COUNTS = /^                  ({.*})$/;
+Coverage.CONTINUATION = /^\t([^\t].*)$/;
 
 // Parse a series of data lines to build up an array of Script objects
 Coverage.Parser = (function() {
@@ -342,8 +314,7 @@ Coverage.Script = (function() {
         script.remap = remap;
 
         lines.forEach(function(dataline) {
-            var match;
-            var file, line, virtual;
+            var match, file, line, virtual, opcode;
 
             if (match = dataline.match(Coverage.SCRIPT_START)) {
                 file = match[1];
@@ -361,64 +332,38 @@ Coverage.Script = (function() {
             else if (dataline.match(Coverage.SCRIPT_END)) {
                 return;
             }
-            else if (dataline === "main:") {
-                script.entrypoint = script.opcodes.length;
-            }
-            else if (match = dataline.match(Coverage.SCRIPT_DATA)) {
-                line = parseInt(match[3], 10);
+            else if (match = dataline.match(Coverage.OPCODE)) {
+                line = parseInt(match[2], 10);
                 if (script.remap) {
                     virtual = script.remap(script.rawfilename, line);
                     line = virtual[1];
                 }
 
-                // The counts field used to have 3 counts and this was
-                // hardcoded. Now it has 6, but only the first 3 are real
-                // counts. I've changed the regexp to allow any number.
-                // But the code below assumes that there are at least 3.
-                // Hopefully the -D output will stabilize...
-                var counts = match[2].split('/');
-//                var jits = ;
-
-                var opcode = {
+                opcode = {
                     pc: parseInt(match[1], 10),
-//                    count: parseInt(counts[0], 10) + jits,
-                    interpreted: parseInt(counts[0], 10),
-                    jitted: parseInt(counts[1], 10) + parseInt(counts[2], 10),
                     srcline: line, 
-                    assembly: match[4]
+                    assembly: match[3]
                 };
-
-                // Figure out what percentage of executions were method JITted
-//                opcode.jitpct = opcode.count > 0
-//                    ? jits/opcode.count
-//                    : 0;
-
-                // Ignore nop opcodes
-                // XXX: this is a fix for the problem of function definitions
-                // causing covered lines in the top-level function.  
-                // But could it cause other problems?
-                if (opcode.assembly === "nop")
-                    return;
-
-                // Discard the (potentially very long) anonymous function 
-                // souce associated with lambda opcodes
-                if (opcode.assembly.match(/^lambda /))
-                    opcode.assembly = "lambda";
-                if (opcode.assembly.match(/^deflocalfun /))
-                    opcode.assembly = "deflocalfun";
 
                 script.pcToOpcodeIndex[opcode.pc] = script.opcodes.length;
                 script.opcodes.push(opcode);
             }
-            else if (dataline[0] === '\t') {
-                // this is part of a switch (or other?) disassembly
-                // for the previous opcode, so append it there
-                script.opcodes[script.opcodes.length-1].assembly += dataline;
+            else if (match = dataline.match(Coverage.CONTINUATION)) {
+                opcode = script.opcodes[script.opcodes.length-1];
+                // the \t separator is used in the reachability analysis
+                opcode.assembly += "\t" + match[1];
+            }
+            else if (match = dataline.match(Coverage.COUNTS)) {
+                opcode = script.opcodes[script.opcodes.length-1];
+                var data = JSON.parse(match[1]);
+                opcode.jitted = data.mjit || 0;
+                opcode.interpreted = data.interp || 0;
             }
             else {
                 // Just ignore lines that we don't recognize.
                 // We have to do this because some opcodes like lambda and
                 // deflocalfun print out long function bodies on multiple lines
+                console.log("Warning: can't parse line", dataline);
                 return;
             }
         });

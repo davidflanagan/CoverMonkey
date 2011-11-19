@@ -1,4 +1,4 @@
-CoverMonkey: src/coverage.js src/NodeApp.js
+CoverMonkey: src/Coverage.js src/NodeApp.js
 	rm -f CoverMonkey
 	echo '#!/usr/bin/env node' >> CoverMonkey
 	cat LICENSE >> CoverMonkey
