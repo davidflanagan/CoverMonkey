@@ -19,6 +19,8 @@ Building CoverMonkey
      make
 
   This just assembles a CoverMonkey node script from the files in src/
+  The repo includes a pre-assembed version of the script, so you don't
+  have to build CoverMonkey unless you edit the source files.
 
 Running CoverMonkey
 
