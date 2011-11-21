@@ -561,7 +561,13 @@ function outputHTML(files, callback) {
 */
     options.targets.forEach(function(target) {
         var file = files[target];
-        var srclines = fs.readFileSync(target, "utf8").split("\n");
+
+        // Read the file, convert &, <, and > to entities, and split into lines
+        var srclines = fs.readFileSync(target, "utf8")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .split("\n");
 
         printf('<a name="%s"><h2>%s</h2></a>\n', target, target);
         srclines.forEach(function(srcline, linenum) {
@@ -573,6 +579,7 @@ function outputHTML(files, callback) {
 /*            addHotLine(srcline, counts, jitpercent);*/
 
             if (srcline === "") srcline = " "; // To make the HTML format right.
+
             if (cov) {
                 var counts = linedata.counts();
                 var jitpercent = linedata.jitpercent();
